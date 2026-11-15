@@ -472,6 +472,12 @@ TRAINS_TRAJETS = _trains.get("trajets") if isinstance(_trains.get("trajets"), li
 TRAINS_PANNEAU_MINUTES = max(1, _entier(_trains, "panneau_minutes", 2))
 TRAINS_PANNEAU_DE = _txt(_trains, "panneau_de", "06:00")
 TRAINS_PANNEAU_A = _txt(_trains, "panneau_a", "23:30")
+# Le recap du matin : un trajet, une heure, les jours en entreprise ou a l'ecole.
+TRAINS_RECAP = _trains.get("recap") if isinstance(_trains.get("recap"), dict) else {}
+TRAINS_RECAP_HEURE = _txt(TRAINS_RECAP, "heure")
+TRAINS_RECAP_JOURS = _txt(TRAINS_RECAP, "jours", "entreprise").lower()
+TRAINS_RECAP_SALON = _txt(TRAINS_RECAP, "salon", "trains")
+TRAINS_RECAP_MENTION = _bool(TRAINS_RECAP, "mentionner", True)
 
 
 # --- Matieres ----------------------------------------------------------------

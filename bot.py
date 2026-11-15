@@ -2646,14 +2646,15 @@ def _sans_cle_trains():
         "redémarrer le bot"], "calme"), []
 
 
-async def _carte_trains(titre, tableaux, boutons=(), menus=(), sous_titre=""):
+async def _carte_trains(titre, tableaux, boutons=(), menus=(), sous_titre="", lignes=()):
     fichier, souci = await _rendu(
         lambda chemin: image.rendre_trains(tableaux, chemin), nom="trains")
     pied = f"temps réel Île-de-France Mobilités · lu à {datetime.now():%H:%M}"
     if fichier is None:
-        return carte(titre, _texte_trains(tableaux), "info", sous_titre=sous_titre,
-                     boutons=boutons, menus=menus, pied=f"{pied} · {souci}"), []
-    return carte(titre, [], "info", sous_titre=sous_titre, image=fichier,
+        return carte(titre, [*lignes, *_texte_trains(tableaux)], "info",
+                     sous_titre=sous_titre, boutons=boutons, menus=menus,
+                     pied=f"{pied} · {souci}"), []
+    return carte(titre, list(lignes), "info", sous_titre=sous_titre, image=fichier,
                  boutons=boutons, menus=menus, pied=pied), [fichier]
 
 
@@ -2722,6 +2723,20 @@ async def vue_trains(gare="", ligne="", direction=""):
             args=("d", g.cle, _arg(ligne))))
     return await _carte_trains(titre, [(titre, liste, "")], boutons=[boutons],
                                menus=menus, sous_titre=g.ville)
+
+
+async def vue_recap_trains(intro=""):
+    """Le trajet du recap du matin, avec plus de trains que le panneau."""
+    t = trains.trajet_recap()
+    if t is None:
+        return await vue_trains()
+    if not config.TRAINS_CLE_API:
+        return _sans_cle_trains()
+    g, liste, erreur = await asyncio.to_thread(trains.tableau, t, TRAINS_MAXI)
+    boutons = [_b("Actualiser", "trains", "r", style="bleu", emoji="🔁"),
+               _b("Mes trajets", "trains", "f", emoji="🏠")]
+    return await _carte_trains(t.nom, [(t.nom, liste, erreur)], boutons=[boutons],
+                               lignes=[intro] if intro else ())
 
 
 async def vue_trajet(index):
@@ -2997,6 +3012,13 @@ def texte_aide():
                       f"🔮 le point : ce qu'il reste à trancher, et le classement")
     lignes.append("`à l'heure dite` — ⏰ chaque rappel posé avec `/rappel`, là où il "
                   "a été posé")
+    recap = trains.trajet_recap()
+    if recap is not None and config.salon_bot(config.TRAINS_RECAP_SALON):
+        quand = {"tous": "en semaine", "ecole": "les jours d'école",
+                 "école": "les jours d'école", "formation": "les jours d'école"}.get(
+            config.TRAINS_RECAP_JOURS, "les jours en entreprise")
+        lignes.append(f"`{config.TRAINS_RECAP_HEURE}`, {quand} **#{config.TRAINS_RECAP_SALON}** "
+                      f"— 🚆 les prochains départs {recap.nom}")
     return lignes
 
 
@@ -3374,6 +3396,8 @@ async def _vue_navigation(action, args, valeurs, inter=None):
         quoi = args[0] if args else "f"
         if quoi == "t" and len(args) > 1 and args[1].isdigit():
             return await vue_trajet(int(args[1]))
+        if quoi == "r":
+            return await vue_recap_trains()
         if quoi == "g" and len(args) > 3:
             return await vue_trains(args[1], _sans_vide(args[2]), _sans_vide(args[3]))
         if quoi == "l" and len(args) > 2:
@@ -4133,10 +4157,56 @@ async def _tic_trains(maintenant):
     await asyncio.to_thread(travail)
 
 
+def jour_de_recap(jour):
+    """Le recap des trains part-il ce jour-la ? Le calendrier d'alternance
+    dit ou tu es ; sans lui (ou hors de ses dates), un jour sans cours en
+    presentiel dans CELCAT compte comme un jour en entreprise."""
+    voulu = config.TRAINS_RECAP_JOURS
+    if jour.weekday() >= 5:
+        return False
+    try:
+        nature = ecole.charger_alternance().nature(jour)
+    except ecole.CalendrierIntrouvable:
+        nature = None
+    if nature == ecole.FERIE:
+        return False
+    if voulu == "tous":
+        return True
+    if nature == ecole.ENTREPRISE or nature in ecole.ECOLE:
+        a_l_ecole = nature in ecole.ECOLE
+    else:
+        cours = edt.charger(hors_ligne=True)[0]
+        a_l_ecole = any(c.est_cours and not c.a_distance for c in edt.du_jour(cours, jour))
+    return a_l_ecole if voulu in ("ecole", "école", "formation") else not a_l_ecole
+
+
+async def _tic_recap_trains(maintenant):
+    """Une fois par jour, a l'heure dite et les bons jours seulement : les
+    prochains departs du trajet du recap, dans son salon."""
+    salon_id = config.salon_bot(config.TRAINS_RECAP_SALON)
+    if not (salon_id and config.TRAINS_CLE_API and trains.trajet_recap()):
+        return
+    cle = f"recap-trains:{maintenant.date()}"
+    moment = affichage.a_heure(maintenant.date(), config.TRAINS_RECAP_HEURE, (7, 45))
+    if _deja(cle) or not assistant._du(moment, maintenant, fenetre_min=10):
+        return
+    if not await asyncio.to_thread(jour_de_recap, maintenant.date()):
+        return
+    _marquer(cle)
+    mention = config.MENTION if config.TRAINS_RECAP_MENTION and config.MENTIONS_ACTIVES else ""
+    intro = f"{mention} tes trains de ce matin" if mention else ""
+    vue_, fichiers = await vue_recap_trains(intro)
+    salon = await _salon(salon_id)
+    await salon.send(view=vue_, files=fichiers,
+                     allowed_mentions=discord.AllowedMentions(users=True, roles=True))
+    print(f"{maintenant:%H:%M} | récap des trains envoyé", flush=True)
+
+
 TACHES = (("rappels", _tic_rappels), ("anniversaires", _tic_anniversaires),
           ("sondages", _tic_sondages), ("predictions", _tic_recap_predictions),
           ("evenements", _tic_evenements), ("quiz", _tic_quiz),
-          ("quiz du jour", _tic_quiz_du_jour), ("trains", _tic_trains))
+          ("quiz du jour", _tic_quiz_du_jour), ("trains", _tic_trains),
+          ("récap des trains", _tic_recap_trains))
 
 
 @tasks.loop(seconds=30)

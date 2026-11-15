@@ -425,16 +425,23 @@ def destinations(liste):
 
 
 # --- Les favoris -------------------------------------------------------------
+def _trajet(t):
+    """Un Trajet a partir d'une entree de config.yaml, None si elle est vide."""
+    if not isinstance(t, dict) or not str(t.get("gare") or "").strip():
+        return None
+    brut = t.get("lignes") or []
+    lignes_ = tuple(str(l) for l in (brut if isinstance(brut, list) else [brut]))
+    return Trajet(str(t.get("nom") or t["gare"]).strip(), str(t["gare"]).strip(),
+                  lignes_, str(t.get("direction") or "").strip())
+
+
 def trajets():
-    sortie = []
-    for t in config.TRAINS_TRAJETS:
-        if not isinstance(t, dict) or not str(t.get("gare") or "").strip():
-            continue
-        brut = t.get("lignes") or []
-        lignes_ = tuple(str(l) for l in (brut if isinstance(brut, list) else [brut]))
-        sortie.append(Trajet(str(t.get("nom") or t["gare"]).strip(), str(t["gare"]).strip(),
-                             lignes_, str(t.get("direction") or "").strip()))
-    return sortie
+    return [t for t in map(_trajet, config.TRAINS_TRAJETS) if t is not None]
+
+
+def trajet_recap():
+    """Le trajet du recap du matin, ou None s'il est desactive."""
+    return _trajet(config.TRAINS_RECAP) if config.TRAINS_RECAP_HEURE else None
 
 
 def tableau(trajet, maxi=5):

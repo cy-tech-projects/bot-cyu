@@ -415,6 +415,28 @@ trains:
       lignes: [A, L]
       direction: "-Cergy"
 
+  # LE RECAP DU MATIN : les prochains departs d'un trajet, envoyes une fois
+  # par jour a heure fixe, seulement les jours qui comptent.
+  #
+  #   heure      "07:45". Vide = pas de recap.
+  #   jours      entreprise · ecole · tous (du lundi au vendredi). Lu dans le
+  #              calendrier d'alternance (/calendrier) ; sans calendrier, un
+  #              jour sans cours CELCAT compte comme un jour en entreprise.
+  #              Jamais le week-end ni un jour ferie.
+  #   gare, lignes, direction : comme un trajet ci-dessus. La ligne L de
+  #              Cergy-Prefecture vers Paris-Saint-Lazare passe par Becon.
+  #   salon      ou l'envoyer (un IDENTIFIANT DE SALON, voir discord.salons).
+  #   mentionner te mentionner (discord.mention), pour que ca sonne.
+  recap:
+    heure: "07:45"
+    jours: "entreprise"
+    nom: "Cergy → Bécon"
+    gare: "Cergy Préfecture"
+    lignes: [L]
+    direction: "Paris"
+    salon: "trains"
+    mentionner: true
+
   # Le panneau de #trains est reecrit toutes les N minutes (1 au minimum), et
   # seulement entre ces deux heures : la nuit, il n'y a rien a montrer.
   panneau_minutes: 2

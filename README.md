@@ -152,6 +152,12 @@ vers Paris, que le RER finisse à Boissy, à Torcy ou à Marne-la-Vallée.
 Le salon `#trains`, s'il existe, contient **un seul message**, l'afficheur de
 tes trajets, réécrit toutes les deux minutes de 6 h à 23 h 30, sans notifier.
 
+Et **le récap du matin** : les jours où tu es **en entreprise** (lus dans le
+calendrier d'alternance, sinon les jours sans cours CELCAT), à 7 h 45, les
+prochains départs de Cergy-Préfecture vers Bécon (ligne L), avec une mention
+pour que ça sonne. Tout se règle dans `trains.recap` : l'heure, les jours
+(`entreprise`, `ecole` ou `tous`), le trajet, le salon.
+
 Source : l'API **PRIM** d'Île-de-France Mobilités. Gratuite, mais avec une
 clé (`trains.cle_api`) : compte sur
 [prim.iledefrance-mobilites.fr](https://prim.iledefrance-mobilites.fr), une clé
