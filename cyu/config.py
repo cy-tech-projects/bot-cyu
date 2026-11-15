@@ -117,6 +117,7 @@ _notif = _section("notifications")
 _aff = _section("affichage")
 _meteo = _section("meteo")
 _classe = _section("classe")
+_trains = _section("trains")
 
 
 # --- Le fuseau horaire, avant tout le reste ----------------------------------
@@ -293,12 +294,12 @@ WEBHOOK_SECOURS = _txt(_discord, "webhook_secours")
 # L'ordre compte : c'est celui de la creation des salons et de l'affichage
 # dans /statut.
 CANAUX = ("annonces", "edt", "devoirs", "alertes", "statut", "commandes", "logs",
-          "predictions")
+          "predictions", "trains")
 
 # Les salons qui n'ont de sens QUE par le bot (des cartes a boutons, qu'un
 # webhook ne sait pas porter). Vides, ils ne retombent pas sur le secours :
 # la fonction se passe simplement de salon dedie.
-CANAUX_BOT_SEULEMENT = ("predictions",)
+CANAUX_BOT_SEULEMENT = ("predictions", "trains")
 
 _salons_bruts = _discord.get("salons") or {}
 SALONS = {canal: _txt(_salons_bruts, canal) for canal in CANAUX}
@@ -461,6 +462,18 @@ QUIZ_SALON = _txt(_classe, "quiz_salon", "predictions")
 QUIZ_GENERATION = _entier(_classe, "quiz_generation", 0)
 
 
+# --- Les trains --------------------------------------------------------------
+# La cle PRIM d'Ile-de-France Mobilites (gratuite). Vide = /trains explique
+# comment l'obtenir au lieu de repondre.
+TRAINS_CLE_API = _txt(_trains, "cle_api")
+# Les favoris : ce que montrent /trains sans argument et le panneau #trains.
+TRAINS_TRAJETS = _trains.get("trajets") if isinstance(_trains.get("trajets"), list) else []
+# Le panneau de #trains est reecrit toutes les N minutes, entre ces deux heures.
+TRAINS_PANNEAU_MINUTES = max(1, _entier(_trains, "panneau_minutes", 2))
+TRAINS_PANNEAU_DE = _txt(_trains, "panneau_de", "06:00")
+TRAINS_PANNEAU_A = _txt(_trains, "panneau_a", "23:30")
+
+
 # --- Matieres ----------------------------------------------------------------
 MATIERES = BRUT.get("matieres") if isinstance(BRUT.get("matieres"), dict) else {}
 
@@ -480,6 +493,8 @@ FICHIER_ANNIVERSAIRES = DONNEES / "anniversaires.json"
 FICHIER_SONDAGES = DONNEES / "sondages.json"    # les sondages du bot en cours
 FICHIER_EVENEMENTS = DONNEES / "evenements.json"  # examens -> evenements Discord
 FICHIER_ETAT_BOT = DONNEES / "etat-bot.json"    # ce que le bot a deja envoye
+FICHIER_GARES = DONNEES / "gares.json"          # referentiel IDFM des gares
+FICHIER_LIGNES = DONNEES / "lignes.json"        # referentiel IDFM des lignes
 
 
 def preparer_dossiers():

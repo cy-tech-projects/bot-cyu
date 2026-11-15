@@ -117,6 +117,12 @@ discord:
     # predictions restent la ou on tape la commande.
     predictions: ""
 
+    # Le panneau des prochains trains de tes trajets (section `trains` plus
+    # bas), une image reecrite sur place toutes les quelques minutes, sans
+    # notifier. Un IDENTIFIANT DE SALON obligatoirement. Vide = pas de
+    # panneau : /trains marche quand meme partout.
+    trains: ""
+
 
 # ─── CYU : CELCAT et webmail ────────────────────────────────────────────────
 cyu:
@@ -373,6 +379,47 @@ classe:
   # 0 = tout le Pokedex (1025 especes, redoutable). 1 a 9 = une seule
   # generation. La 1 (les 151 premiers) est celle que tout le monde connait.
   quiz_generation: 0
+
+
+# ─── Les trains ─────────────────────────────────────────────────────────────
+# Les prochains RER, Transilien, metros et trams, en temps reel : /trains, et
+# le panneau du salon #trains.
+#
+# Source : l'API PRIM d'Ile-de-France Mobilites. Gratuite, mais avec une cle :
+#   1. compte sur https://prim.iledefrance-mobilites.fr
+#   2. Mon espace > Mes jetons d'authentification > generer une cle
+#   3. s'abonner a l'API « Prochains passages (plateforme IDFM) - requete
+#      unitaire »
+# La liste des gares et des lignes, elle, ne demande rien.
+trains:
+  cle_api: ""
+
+  # Tes trajets habituels : ce que montrent /trains sans rien taper, et le
+  # panneau de #trains.
+  #
+  #   gare       son nom, comme dans /trains (« Becon », « Charles de Gaulle
+  #              - Etoile »). Les accents et les tirets ne comptent pas.
+  #   lignes     facultatif : [A], [L], [A, L], [14]... Vide = toutes.
+  #   direction  le TERMINUS contient ce texte : « Cergy » garde Cergy-le-Haut.
+  #              Precede de « - », il exclut : « -Cergy » a Cergy-Prefecture,
+  #              c'est tout ce qui va vers Paris, quel que soit le terminus
+  #              (Boissy, Torcy, Saint-Lazare...). Plusieurs termes : « -Cergy,
+  #              -Poissy ». Vide = toutes les directions.
+  trajets:
+    - nom: "Bécon → Cergy"
+      gare: "Bécon les Bruyères"
+      lignes: [L]
+      direction: "Cergy"
+    - nom: "Cergy-Préfecture → Paris"
+      gare: "Cergy Préfecture"
+      lignes: [A, L]
+      direction: "-Cergy"
+
+  # Le panneau de #trains est reecrit toutes les N minutes (1 au minimum), et
+  # seulement entre ces deux heures : la nuit, il n'y a rien a montrer.
+  panneau_minutes: 2
+  panneau_de: "06:00"
+  panneau_a: "23:30"
 
 
 # ─── Matieres ───────────────────────────────────────────────────────────────

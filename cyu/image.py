@@ -14,7 +14,8 @@ des trous, une amplitude. Ce module dessine donc :
                           devoirs a rendre, heure de lever ;
     rendre_changements()  ce qui a bouge : avant  ➜  apres, ligne par ligne ;
     rendre_devoirs()      le carnet de devoirs, trie par urgence ;
-    rendre_prochain()     le prochain cours, en grand.
+    rendre_prochain()     le prochain cours, en grand ;
+    rendre_trains()       les prochains trains, facon afficheur de quai a LED.
 
 Les jours sont a la verticale (une ligne par jour) et jamais en colonnes : sur
 un telephone, cinq colonnes etroites obligent a zoomer, cinq lignes larges se
@@ -41,7 +42,7 @@ from . import promo
 
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
     DISPONIBLE = True
 except ImportError:                                          # pragma: no cover
     DISPONIBLE = False
@@ -2412,3 +2413,141 @@ def rendre_classement_pokemon(rangs, chemin=None, moi=None, parties=0, sous_titr
 
     return toile.finir(chemin or (config.DONNEES / "quiz-classement.png"),
                        _pied(toile, y))
+
+
+# --- Les trains : un afficheur de quai a LED ----------------------------------
+# Tout est dessine sur une grille de LED (un pixel = une diode), sans lissage,
+# puis chaque pixel devient un point rond : c'est ce qui donne l'aspect des
+# panneaux de quai plutot que celui d'une capture d'ecran. Les couleurs des
+# lignes sont celles d'IDFM : le panneau est en couleur, comme les recents.
+LED_AMBRE = (255, 170, 40)
+LED_AMBRE_PALE = (150, 96, 26)
+LED_ROUGE = (255, 72, 48)
+LED_ETEINTE = (34, 26, 17)
+LED_FOND = (10, 9, 8)
+LED_PAS = 5                 # ecart entre deux diodes, en pixels de l'image
+LED_COLONNES = 236          # largeur du panneau, en diodes
+LED_LIGNE = 13              # hauteur d'une ligne de train, en diodes
+LED_POLICE = 10             # corps de la police, en diodes
+
+
+def _led_texte(d, x, y, texte, couleur, largeur_max=None, aligne="gauche"):
+    police = _police(LED_POLICE, gras=True)
+    texte = _nettoyer(texte)
+    if largeur_max is not None and d.textlength(texte, font=police) > largeur_max:
+        while texte and d.textlength(texte + ".", font=police) > largeur_max:
+            texte = texte[:-1]
+        texte = texte.rstrip() + "."
+    largeur = d.textlength(texte, font=police)
+    if aligne == "droite":
+        x -= largeur
+    d.text((x, y), texte, font=police, fill=couleur)
+    return largeur
+
+
+def _led_quand(p, maintenant):
+    """(texte, couleur) de la colonne de droite."""
+    if p.supprime:
+        return "SUPPR.", LED_ROUGE
+    minutes = p.minutes(maintenant)
+    if p.a_quai or minutes <= 0:
+        return "À QUAI", LED_AMBRE
+    return f"{minutes} min", LED_AMBRE
+
+
+def _led_section(d, y, titre, passages, erreur, maintenant):
+    """Un trajet : son titre, puis une ligne par train. Rend le y suivant."""
+    largeur = LED_COLONNES
+    _led_texte(d, 2, y, titre.upper(), LED_AMBRE, largeur_max=largeur - 4)
+    y += LED_LIGNE
+    d.line([(2, y), (largeur - 3, y)], fill=LED_AMBRE_PALE)
+    y += 2
+    if erreur:
+        _led_texte(d, 2, y + 1, erreur, LED_ROUGE, largeur_max=largeur - 4)
+        return y + LED_LIGNE + 3
+    if not passages:
+        _led_texte(d, 2, y + 1, "Aucun train annoncé", LED_AMBRE_PALE)
+        return y + LED_LIGNE + 3
+    police = _police(LED_POLICE, gras=True)
+    # La pastille encadre les majuscules, quelle que soit la police du serveur.
+    _, haut, _, bas = police.getbbox("H")
+    for p in passages:
+        quand, couleur = _led_quand(p, maintenant)
+        # La pastille de la ligne, a ses couleurs IDFM.
+        nom = _nettoyer(p.ligne.nom)[:3]
+        large = max(bas - haut + 4, int(d.textlength(nom, font=police)) + 4)
+        boite = [2, y + haut - 2, 2 + large - 1, y + bas + 1]
+        if p.ligne.rond and large <= bas - haut + 5:
+            d.ellipse(boite, fill=p.ligne.fond)
+        else:
+            d.rectangle(boite, fill=p.ligne.fond)
+        d.text((2 + (large - d.textlength(nom, font=police)) / 2, y), nom,
+               font=police, fill=p.ligne.texte)
+        # De droite a gauche : les minutes, l'heure (rouge si en retard),
+        # puis la destination dans la place qui reste.
+        x = largeur - 2
+        _led_texte(d, x, y, quand, couleur, aligne="droite")
+        x -= 44
+        heure = f"{p.heure:%H:%M}"
+        _led_texte(d, x, y, heure, LED_ROUGE if p.retard else LED_AMBRE_PALE,
+                   aligne="droite")
+        x -= d.textlength(heure, font=police) + 5
+        if p.retard and not p.supprime:
+            x -= _led_texte(d, x, y, f"+{p.retard}", LED_ROUGE, aligne="droite") + 4
+        _led_texte(d, 2 + large + 4, y, p.destination, LED_AMBRE,
+                   largeur_max=x - (2 + large + 4))
+        y += LED_LIGNE
+    return y + 3
+
+
+def rendre_trains(tableaux, chemin=None, maintenant=None):
+    """Les prochains trains, une section par trajet.
+
+    `tableaux` : [(titre, passages, erreur)], chaque passage etant un
+    trains.Passage. `erreur` (texte) remplace la liste quand le trajet n'a pas
+    pu etre lu : un trajet en panne n'empeche pas les autres de s'afficher.
+    """
+    if not DISPONIBLE:
+        raise PillowManquant("Pillow n'est pas installe, donc pas d'image possible.\n"
+                             "    pip install pillow")
+    maintenant = maintenant or datetime.now()
+    hauteur = 4 + LED_LIGNE + 4 + sum(
+        LED_LIGNE + 3 + LED_LIGNE * max(1, len(t[1])) + 3 for t in tableaux)
+    grille = Image.new("RGB", (LED_COLONNES, hauteur), LED_ETEINTE)
+    d = ImageDraw.Draw(grille)
+    d.fontmode = "1"            # pas de lissage : une diode est allumee ou non
+
+    y = 3
+    _led_texte(d, 2, y, "Prochains départs", LED_AMBRE_PALE)
+    _led_texte(d, LED_COLONNES - 2, y, f"{maintenant:%H:%M}", LED_AMBRE, aligne="droite")
+    y += LED_LIGNE + 4
+    for titre, passages, erreur in tableaux:
+        y = _led_section(d, y, titre, passages, erreur, maintenant)
+
+    # Chaque pixel devient une diode ronde, sur un fond presque noir, avec
+    # un leger halo autour de ce qui est allume.
+    grand = grille.resize((LED_COLONNES * LED_PAS, hauteur * LED_PAS), Image.NEAREST)
+    motif = Image.new("L", (LED_PAS, LED_PAS), 0)
+    ImageDraw.Draw(motif).ellipse([0, 0, LED_PAS - 2, LED_PAS - 2], fill=255)
+    masque = Image.new("L", grand.size, 0)
+    for x in range(0, grand.width, LED_PAS):
+        masque.paste(motif, (x, 0))
+    bande = masque.crop((0, 0, grand.width, LED_PAS))
+    for yy in range(LED_PAS, grand.height, LED_PAS):
+        masque.paste(bande, (0, yy))
+    diodes = Image.composite(grand, Image.new("RGB", grand.size, LED_FOND), masque)
+    allume = ImageChops.subtract(grand, Image.new("RGB", grand.size, LED_ETEINTE))
+    halo = allume.filter(ImageFilter.GaussianBlur(LED_PAS * 0.9))
+    diodes = ImageChops.add(diodes, ImageChops.multiply(
+        halo, Image.new("RGB", grand.size, (110, 110, 110))))
+
+    bord = 18
+    img = Image.new("RGB", (diodes.width + 2 * bord, diodes.height + 2 * bord), (24, 22, 20))
+    ImageDraw.Draw(img).rounded_rectangle([3, 3, img.width - 4, img.height - 4],
+                                          radius=10, fill=LED_FOND, outline=(48, 44, 38),
+                                          width=2)
+    img.paste(diodes, (bord, bord))
+    chemin = Path(chemin or (config.DONNEES / "trains.png"))
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    img.save(chemin, "PNG", optimize=True)
+    return chemin

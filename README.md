@@ -131,6 +131,34 @@ rien à remplir**. Les coordonnées par défaut sont celles de Cergy ;
 Le pictogramme des images est **dessiné**, pas écrit en emoji : sur un serveur
 où seule DejaVu est installée, un emoji devient un carré vide.
 
+### Il te dit quand passe ton train
+
+`/trains` montre les prochains **RER, Transilien, métros et trams**, en temps
+réel, sur une image façon **afficheur de quai à LED** : la pastille de la
+ligne à ses couleurs, le terminus, l'heure, les minutes restantes, le retard
+en rouge, « À QUAI », « SUPPR. ».
+
+- **sans rien taper** : tes trajets habituels (`trains.trajets` dans
+  `config.yaml`, par défaut Bécon → Cergy et Cergy-Préfecture → Paris) ;
+- **avec une gare** : n'importe laquelle d'Île-de-France, avec
+  l'autocomplétion (« etoile » trouve Charles de Gaulle - Étoile), puis la
+  ligne et la direction en option, proposées d'après les trains annoncés.
+  Sur la carte, deux menus filtrent par ligne et par terminus.
+
+La direction se lit sur le **terminus** : « Cergy » garde Cergy-le-Haut, et
+« -Cergy » exclut. À Cergy-Préfecture, « -Cergy » c'est donc tout ce qui part
+vers Paris, que le RER finisse à Boissy, à Torcy ou à Marne-la-Vallée.
+
+Le salon `#trains`, s'il existe, contient **un seul message**, l'afficheur de
+tes trajets, réécrit toutes les deux minutes de 6 h à 23 h 30, sans notifier.
+
+Source : l'API **PRIM** d'Île-de-France Mobilités. Gratuite, mais avec une
+clé (`trains.cle_api`) : compte sur
+[prim.iledefrance-mobilites.fr](https://prim.iledefrance-mobilites.fr), une clé
+dans *Mes jetons d'authentification*, et l'abonnement à l'API « Prochains
+passages (plateforme IDFM) – requête unitaire ». La liste des gares et des
+lignes vient de l'open data IDFM, sans clé, gardée un mois dans `donnees/`.
+
 ### Il compte ce que ta semaine te coûte
 
 `/stats` répond à ce que l'emploi du temps ne dit pas : est-ce que cette
@@ -317,6 +345,7 @@ rien en mémoire. Un message d'il y a un mois marche encore.
 | `/libre` | tes créneaux libres |
 | `/stats [quand]` | **ce que pèse ta semaine** en photo : heures, matières, trous, jour le plus lourd. `quand: tout l'emploi du temps` — **toutes les heures par matière**, et semaine par semaine |
 | `/meteo [jours]` | le temps qu'il fera, et **s'il faut un parapluie** pour ton trajet |
+| `/trains [gare] [ligne] [direction]` | les **prochains trains** en temps réel, sur un afficheur à LED ; sans gare, tes trajets habituels |
 | `/comparer [quand]` | **cette semaine contre la précédente** : heures, séances, trous, devoirs à rendre, et ce qui bouge matière par matière |
 | `/examens` | **compte à rebours** avant chaque examen — ceux de CELCAT et ceux de ton carnet réunis — et le temps libre pour réviser d'ici le premier |
 | `/ects [semestre]` | **la maquette de la promo en photo** : chaque UE, chaque matière, ses ECTS, son coefficient, ses heures de CM/TD/TP et **comment elle est évaluée** (contrôle continu ou examen terminal). Un bouton par semestre, une vue de l'année, et **⬇️ Télécharger** qui rend l'image et le classeur source |
@@ -357,7 +386,7 @@ son nom.
 
 ---
 
-## Les huit salons
+## Les neuf salons
 
 Un salon par type de message, pour régler les notifications Discord séparément.
 
@@ -371,6 +400,7 @@ Un salon par type de message, pour régler les notifications Discord séparémen
 | `#commandes` | ton salon fourre-tout + le panneau de boutons | muet |
 | `#logs` | démarrages, erreurs, heartbeats | **muet** |
 | `#predictions` | le jeu des prédictions (une carte par pari, ses boutons de vote) et le point du dimanche | tous les messages |
+| `#trains` | l'afficheur des prochains trains de tes trajets, réécrit sur place | muet |
 
 `#edt` et `#statut` ne contiennent qu'**un seul message chacun**, réécrit en
 place. Ils ne notifient donc jamais, et l'information y est toujours à jour et
@@ -379,7 +409,9 @@ toujours en haut. Supprime le message à la main et il se régénère.
 Tu n'es obligé d'en créer aucun : tout salon laissé vide dans `config.yaml`
 retombe sur `webhook_secours`. Sauf `#predictions`, qui est **facultatif et
 doit être un identifiant de salon** (pas un webhook : ses cartes ont des
-boutons) — vide, les prédictions restent là où on tape `/parier`.
+boutons) — vide, les prédictions restent là où on tape `/parier`. Même
+règle pour `#trains` : vide, pas d'afficheur permanent, mais `/trains` marche
+partout.
 
 ---
 
@@ -479,7 +511,7 @@ droit sur le salon → Copier l'identifiant, mode développeur activé) dans
 `config.yaml`. Soit tu laisses le bot les créer :
 
 ```bash
-python assistant.py salons     # crée les 8 salons ET écrit les ids dans config.yaml
+python assistant.py salons     # crée les 9 salons ET écrit les ids dans config.yaml
 python assistant.py init       # un message de test dans chacun, pour vérifier
 ```
 
@@ -678,7 +710,8 @@ systemctl --user stop assistant-cyu
 | `cyu/promo.py` | **ce que la promo garde sur disque** : le carnet de devoirs, les rappels (et la grammaire de « quand »), les prédictions, les sondages, les anniversaires, les examens en événements Discord, le quiz Pokémon |
 | `cyu/ecole.py` | **les documents de l'école**, lus sans dépendance : la maquette M3C (UE, ECTS, coefficients) et le calendrier d'alternance (le PDF, recalé sur de vraies dates) |
 | `cyu/affichage.py` | **tout ce qui met en forme et envoie** : le texte (journée, grille, devoirs, .ics), les cartes Discord, l'aiguillage vers les salons, les tableaux vivants de `#statut` et `#edt` |
-| `cyu/image.py` | **tout le rendu en images** : la journée, la période, les changements, les devoirs, le prochain cours, le tableau de bord de la semaine (Pillow) |
+| `cyu/trains.py` | **les trains** : les gares et les lignes (open data IDFM), les prochains passages en temps réel (PRIM), les filtres par ligne et par direction, les trajets favoris |
+| `cyu/image.py` | **tout le rendu en images** : la journée, la période, les changements, les devoirs, le prochain cours, le tableau de bord de la semaine, l'afficheur des trains (Pillow) |
 | `assistant.py` | le daemon, la ligne de commande, et la surveillance du webmail (`python assistant.py uptime`) |
 | `bot.py` | le bot Discord : commandes slash, navigation par boutons, panneau, formulaires, et la boucle `tic` (rappels, anniversaires, résultats de sondages, point des prédictions, événements) |
 
@@ -708,5 +741,8 @@ l'ancien devient aussitôt inutilisable.
 Tes identifiants CYU ne partent qu'à `celcat-calendar.cyu.fr`, et le jeton du
 bot qu'à `discord.com`. Le bot contacte aussi, sans rien y envoyer de
 personnel : `mail.etu.cyu.fr` (surveillance du webmail),
-`api.open-meteo.com` (les coordonnées de `meteo.latitude` / `longitude`) et
+`api.open-meteo.com` (les coordonnées de `meteo.latitude` / `longitude`),
+`prim.iledefrance-mobilites.fr` (la clé `trains.cle_api` et les gares
+demandées), `data.iledefrance-mobilites.fr` (la liste des gares et des lignes)
+et
 `raw.githubusercontent.com` (les noms et images PokéAPI du quiz).

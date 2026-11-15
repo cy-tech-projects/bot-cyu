@@ -28,7 +28,7 @@ jobs:
       - name: Les modules s'importent avec la config d'exemple
         run: |
           cp config.example.yaml config.yaml
-          python -c "import bot, assistant; from cyu import affichage, config, ecole, edt, image, promo"
+          python -c "import bot, assistant; from cyu import affichage, config, ecole, edt, image, promo, trains"
           python assistant.py --help > /dev/null
 
       - name: Scripts de déploiement (syntaxe + shellcheck)

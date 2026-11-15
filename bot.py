@@ -25,6 +25,8 @@ C'est le fichier a lancer au quotidien. Un seul processus fait les deux choses :
     /rappel, /rappels   « demain 9h : rendre le TP », le bot te mentionne
     /anniversaire(s)    le tien, et les prochains de la promo
     /meteo [jours]      le temps, et s'il faut un parapluie pour ton trajet
+    /trains [gare]      les prochains RER, Transilien, metros et trams en temps
+                        reel ; sans gare, tes trajets de config.yaml
     /libre              tes creneaux libres
     /ects [semestre]    la maquette : UE, matieres, ECTS, coefficients
     /calendrier [quand] le calendrier d'alternance EN PHOTO : entreprise,
@@ -90,6 +92,7 @@ from cyu import ecole
 from cyu import edt
 from cyu import image
 from cyu import promo
+from cyu import trains
 
 
 # Le daemon tourne-t-il dans le meme processus que le bot ? Mets False si tu
@@ -2598,6 +2601,143 @@ async def vue_meteo(jours=0):
                  boutons=boutons, pied=pied), []
 
 
+# --- Les trains --------------------------------------------------------------
+# Une ligne ou une direction vide voyage sous la forme « * » dans les boutons :
+# _decouper_args jette les morceaux vides, et les arguments glisseraient.
+VIDE = "*"
+TRAINS_MAXI = 8
+
+
+def _arg(texte):
+    return re.sub(r"[:\s]+", " ", str(texte or "")).strip()[:40] or VIDE
+
+
+def _sans_vide(texte):
+    return "" if texte == VIDE else texte
+
+
+def _texte_trains(tableaux):
+    """Les memes trains en texte, quand l'image ne peut pas etre dessinee
+    (Pillow absent, ou `affichage.images: false`)."""
+    lignes = []
+    for titre, liste, erreur in tableaux:
+        lignes.append(f"**{titre}**")
+        if erreur:
+            lignes.append(f"⚠️ {erreur}")
+        for p in liste:
+            quand = ("supprimé" if p.supprime else
+                     "à quai" if p.a_quai or p.minutes() <= 0 else f"{p.minutes()} min")
+            retard = f" · **+{p.retard} min**" if p.retard and not p.supprime else ""
+            lignes.append(f"`{p.ligne.complet}` {p.destination} — **{quand}** "
+                          f"({p.heure:%H:%M}{retard})")
+        if not erreur and not liste:
+            lignes.append("Aucun train annoncé.")
+    return lignes
+
+
+def _sans_cle_trains():
+    return carte("Trains — il manque la clé", [
+        "Les horaires en temps réel viennent de l'API **PRIM** d'Île-de-France "
+        "Mobilités, gratuite mais avec une clé :",
+        "1. un compte sur <https://prim.iledefrance-mobilites.fr>",
+        "2. *Mon espace → Mes jetons d'authentification* → générer une clé",
+        "3. s'abonner à l'API **Prochains passages (plateforme IDFM) – requête unitaire**",
+        "4. la coller dans `config.yaml`, section `trains`, clé `cle_api`, puis "
+        "redémarrer le bot"], "calme"), []
+
+
+async def _carte_trains(titre, tableaux, boutons=(), menus=(), sous_titre=""):
+    fichier, souci = await _rendu(
+        lambda chemin: image.rendre_trains(tableaux, chemin), nom="trains")
+    pied = f"temps réel Île-de-France Mobilités · lu à {datetime.now():%H:%M}"
+    if fichier is None:
+        return carte(titre, _texte_trains(tableaux), "info", sous_titre=sous_titre,
+                     boutons=boutons, menus=menus, pied=f"{pied} · {souci}"), []
+    return carte(titre, [], "info", sous_titre=sous_titre, image=fichier,
+                 boutons=boutons, menus=menus, pied=pied), [fichier]
+
+
+async def vue_trains(gare="", ligne="", direction=""):
+    """Sans gare : les trajets de config.yaml. Avec : les prochains passages
+    de cette gare, filtres par ligne et par direction."""
+    if not config.TRAINS_CLE_API:
+        return _sans_cle_trains()
+    favoris = trains.trajets()
+    raccourcis = [_b(t.nom[:40], "trains", "t", i, emoji="🚆")
+                  for i, t in enumerate(favoris[:4])]
+
+    if not gare.strip():
+        if not favoris:
+            return carte("Trains", ["Aucun trajet dans `config.yaml` (section `trains`, "
+                                    "`trajets`). Tape `/trains` suivi d'une gare."],
+                         "calme"), []
+        resultats = await asyncio.to_thread(lambda: [trains.tableau(t) for t in favoris])
+        tableaux = [(t.nom, liste, erreur)
+                    for t, (_, liste, erreur) in zip(favoris, resultats)]
+        return await _carte_trains("Prochains trains", tableaux, boutons=[
+            [_b("Actualiser", "trains", "f", style="bleu", emoji="🔁")] + raccourcis])
+
+    g = await asyncio.to_thread(trains.gare, gare)
+    if g is None:
+        return affichage.erreur(f"Aucune gare ne ressemble à « {gare} ». L'autocomplétion "
+                                f"de `/trains` propose les noms exacts."), []
+    try:
+        tous = await asyncio.to_thread(trains.passages, g)
+    except trains.ErreurTrains as e:
+        return carte(g.nom, [f"⚠️ {e}"], "alerte",
+                     boutons=[_b("Réessayer", "trains", "g", g.cle, _arg(ligne),
+                                 _arg(direction), emoji="🔁")]), []
+
+    lignes_voulues = [ligne] if ligne.strip() else []
+    liste = trains.filtrer(tous, lignes_voulues, direction)[:TRAINS_MAXI]
+    titre = g.nom
+    if ligne.strip():
+        trouvee = next((l for l in trains.lignes_de(tous)
+                        if trains.cle_ligne(l.nom) == trains.cle_ligne(ligne)), None)
+        titre += f" · {trouvee.complet if trouvee else ligne}"
+    if direction.strip():
+        titre += f" → {direction}"
+
+    boutons = [_b("Actualiser", "trains", "g", g.cle, _arg(ligne), _arg(direction),
+                  style="bleu", emoji="🔁")]
+    if direction.strip():
+        boutons.append(_b("Toutes directions", "trains", "g", g.cle, _arg(ligne), VIDE))
+    if ligne.strip():
+        boutons.append(_b("Toutes lignes", "trains", "g", g.cle, VIDE, _arg(direction)))
+    boutons.append(_b("Mes trajets", "trains", "f", emoji="🏠"))
+
+    menus = []
+    presentes = trains.lignes_de(tous)
+    if len(presentes) > 1:
+        menus.append(affichage.Menu(
+            "trains", "Une seule ligne…",
+            [(l.complet, l.nom, None, None)
+             for l in {l.nom: l for l in presentes}.values()][:25],
+            args=("l", g.cle, _arg(direction))))
+    terminus = trains.destinations(trains.filtrer(tous, lignes_voulues))
+    if len(terminus) > 1:
+        menus.append(affichage.Menu(
+            "trains", "Vers…",
+            [(d[:100], d[:100], None, None) for d in terminus[:25]],
+            args=("d", g.cle, _arg(ligne))))
+    return await _carte_trains(titre, [(titre, liste, "")], boutons=[boutons],
+                               menus=menus, sous_titre=g.ville)
+
+
+async def vue_trajet(index):
+    """Un seul favori, avec plus de trains que sur la vue d'ensemble."""
+    favoris = trains.trajets()
+    if not 0 <= index < len(favoris):
+        return await vue_trains()
+    t = favoris[index]
+    g, liste, erreur = await asyncio.to_thread(trains.tableau, t, TRAINS_MAXI)
+    boutons = [_b("Actualiser", "trains", "t", index, style="bleu", emoji="🔁")]
+    if g is not None:
+        boutons.append(_b("Toute la gare", "trains", "g", g.cle, VIDE, VIDE, emoji="🚉"))
+    boutons.append(_b("Mes trajets", "trains", "f", emoji="🏠"))
+    return await _carte_trains(t.nom, [(t.nom, liste, erreur)], boutons=[boutons])
+
+
 # --- Les creneaux libres -----------------------------------------------------
 async def vue_libre(jours=7):
     jours = max(1, min(int(jours), 31))
@@ -2648,7 +2788,9 @@ async def vue_statut():
         mode, cible = affichage.destination(canal)
         if canal in config.CANAUX_BOT_SEULEMENT:
             ou = (f"<#{cible}>" if config.salon_bot(canal)
-                  else "— pas de salon dédié (les prédictions restent où on les pose)")
+                  else "— pas de salon dédié" + (
+                      " (les prédictions restent où on les pose)" if canal == "predictions"
+                      else " (pas de panneau, /trains marche partout)"))
         else:
             ou = f"<#{cible}>" if mode == "bot" else "webhook"
             if not affichage.salon_configure(canal):
@@ -2711,7 +2853,8 @@ def vue_panneau():
         + ([_b("Alternance", "pan", "alternance", emoji="🗓️")]
            if ecole.disponible_alternance() else [])
         + ([_b("Quiz Pokémon", "pan", "quiz", emoji="🏆")]
-           if promo.disponible() else []),
+           if promo.disponible() else [])
+        + [_b("Trains", "pan", "trains", emoji="🚆")],
         [_b("Rappel", "rap", "ajout", emoji="⏰"),
          _b("Mes rappels", "pan", "rappels", emoji="📋"),
          _b("Anniversaires", "pan", "anniv", emoji="🎂"),
@@ -2754,6 +2897,8 @@ def texte_aide():
         "le plus lourd. `quand: tout l'emploi du temps` pour le bilan de "
         "**toutes les heures par matière**",
         "`/meteo` — le temps, et **s'il faut un parapluie** pour ton trajet",
+        "`/trains [gare] [ligne] [direction]` — les **prochains trains** en temps réel ; "
+        "sans gare, tes trajets habituels",
         "`/libre` — tes créneaux libres",
         "`/comparer` — **cette semaine contre la précédente** : heures, séances, "
         "trous, devoirs, et ce qui bouge par matière",
@@ -3045,6 +3190,8 @@ async def _vue_panneau(args, valeurs, inter=None):
         return await vue_stats(edt.semaine_de(auj))
     if quoi == "meteo":
         return await vue_meteo(0)
+    if quoi == "trains":
+        return await vue_trains()
     if quoi == "libre":
         return await vue_libre(7)
     if quoi == "examens":
@@ -3223,6 +3370,17 @@ async def _vue_navigation(action, args, valeurs, inter=None):
         return await vue_anniversaires(uid)
     if action == "meteo":
         return await vue_meteo(int(args[0]))
+    if action == "trains":
+        quoi = args[0] if args else "f"
+        if quoi == "t" and len(args) > 1 and args[1].isdigit():
+            return await vue_trajet(int(args[1]))
+        if quoi == "g" and len(args) > 3:
+            return await vue_trains(args[1], _sans_vide(args[2]), _sans_vide(args[3]))
+        if quoi == "l" and len(args) > 2:
+            return await vue_trains(args[1], (valeurs or [""])[0], _sans_vide(args[2]))
+        if quoi == "d" and len(args) > 2:
+            return await vue_trains(args[1], _sans_vide(args[2]), (valeurs or [""])[0])
+        return await vue_trains()
     if action == "actu":
         return await vue_actu(int(args[0]))
     if action == "libre":
@@ -3638,6 +3796,56 @@ async def cmd_meteo(inter: discord.Interaction, jours: int = 0):
     await _commande(inter, vue_meteo(jours))
 
 
+@bot.tree.command(name="trains",
+                  description="Les prochains RER, trains, métros et trams, en temps réel")
+@app_commands.describe(gare="Vide = tes trajets habituels (config.yaml)",
+                       ligne="RER A, L, 14, T2… Vide = toutes",
+                       direction="Le terminus contient… « Cergy », ou « -Cergy » pour l'exclure")
+async def cmd_trains(inter: discord.Interaction, gare: str = "", ligne: str = "",
+                     direction: str = ""):
+    await _commande(inter, vue_trains(gare, ligne, direction))
+
+
+async def _passages_vite(gare):
+    """Les passages d'une gare pour l'autocompletion : Discord n'attend que
+    trois secondes, on abandonne avant plutot que de ne rien proposer."""
+    try:
+        g = await asyncio.wait_for(asyncio.to_thread(trains.gare, gare), 1.5)
+        if g is None or not config.TRAINS_CLE_API:
+            return []
+        return await asyncio.wait_for(asyncio.to_thread(trains.passages, g), 2.0)
+    except (asyncio.TimeoutError, trains.ErreurTrains):
+        return []
+
+
+@cmd_trains.autocomplete("gare")
+async def auto_gare(inter: discord.Interaction, saisie: str):
+    if not saisie.strip():
+        return [app_commands.Choice(name=f"⭐ {t.nom}"[:100], value=t.gare[:100])
+                for t in trains.trajets()[:25]]
+    trouvees = await asyncio.to_thread(trains.chercher, saisie)
+    return [app_commands.Choice(name=g.libelle[:100], value=g.cle) for g in trouvees]
+
+
+@cmd_trains.autocomplete("ligne")
+async def auto_ligne(inter: discord.Interaction, saisie: str):
+    presentes = trains.lignes_de(await _passages_vite(inter.namespace.gare or ""))
+    bas = trains.cle_ligne(saisie)
+    noms = {l.nom: l for l in presentes}.values()
+    return [app_commands.Choice(name=l.complet, value=l.nom) for l in noms
+            if not bas or trains.cle_ligne(l.nom).startswith(bas)][:25]
+
+
+@cmd_trains.autocomplete("direction")
+async def auto_direction(inter: discord.Interaction, saisie: str):
+    liste = await _passages_vite(inter.namespace.gare or "")
+    ligne = inter.namespace.ligne or ""
+    liste = trains.filtrer(liste, [ligne] if ligne else [])
+    bas = edt.normaliser(saisie.lstrip("-"))
+    return [app_commands.Choice(name=d[:100], value=d[:100])
+            for d in trains.destinations(liste) if bas in edt.normaliser(d)][:25]
+
+
 @bot.tree.command(name="libre", description="Tes créneaux libres à venir")
 @app_commands.describe(jours="nombre de jours à regarder (7 par défaut)")
 async def cmd_libre(inter: discord.Interaction, jours: int = 7):
@@ -3883,10 +4091,52 @@ async def _tic_evenements(maintenant):
               f"{retires} retirés", flush=True)
 
 
+_DERNIER_PANNEAU_TRAINS = [0.0]
+
+
+def _heure_du_panneau(maintenant):
+    """Le panneau tourne-t-il a cette heure ? La plage peut passer minuit."""
+    de, a = config.TRAINS_PANNEAU_DE, config.TRAINS_PANNEAU_A
+    if not de or not a:
+        return True
+    ici = (maintenant.hour, maintenant.minute)
+    debut, fin = affichage.hhmm(de), affichage.hhmm(a, (23, 59))
+    return debut <= ici < fin if debut <= fin else (ici >= debut or ici < fin)
+
+
+async def _tic_trains(maintenant):
+    """Le panneau de #trains : une image reecrite sur place, sans notifier,
+    toutes les `panneau_minutes`, aux heures ou il y a des trains."""
+    if not (config.salon_bot("trains") and config.TRAINS_CLE_API and trains.trajets()):
+        return
+    if not _heure_du_panneau(maintenant):
+        return
+    if time.monotonic() - _DERNIER_PANNEAU_TRAINS[0] < config.TRAINS_PANNEAU_MINUTES * 60 - 5:
+        return
+    _DERNIER_PANNEAU_TRAINS[0] = time.monotonic()
+
+    def travail():
+        favoris = trains.trajets()
+        tableaux = [(t.nom, liste, erreur)
+                    for t, (_, liste, erreur) in zip(favoris, map(trains.tableau, favoris))]
+        chemin = config.DONNEES / "panneau-trains.png"
+        if image.DISPONIBLE and config.IMAGES:
+            image.rendre_trains(tableaux, chemin)
+            return affichage.epingler_image(
+                "panneau-trains", chemin, "🚆 Prochains trains",
+                f"mis à jour à {datetime.now():%H:%M} · `/trains` pour une autre gare",
+                couleur="info", canal="trains")
+        return affichage.epingler(
+            "panneau-trains", "🚆 Prochains trains", "\n".join(_texte_trains(tableaux)),
+            couleur="info", canal="trains")
+
+    await asyncio.to_thread(travail)
+
+
 TACHES = (("rappels", _tic_rappels), ("anniversaires", _tic_anniversaires),
           ("sondages", _tic_sondages), ("predictions", _tic_recap_predictions),
           ("evenements", _tic_evenements), ("quiz", _tic_quiz),
-          ("quiz du jour", _tic_quiz_du_jour))
+          ("quiz du jour", _tic_quiz_du_jour), ("trains", _tic_trains))
 
 
 @tasks.loop(seconds=30)

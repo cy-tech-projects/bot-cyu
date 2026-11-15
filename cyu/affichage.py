@@ -984,6 +984,7 @@ SALONS = {
     "logs":      ("logs", "Demarrages, erreurs, heartbeats. A mettre en muet."),
     "predictions": ("predictions", "Vos predictions et vos sondages : qui va valider, "
                                    "quel cours va sauter. On vote, l'auteur tranche."),
+    "trains":    ("trains", "Les prochains trains de tes trajets, remis a jour tout seul"),
 }
 
 COULEURS = {"info": 0x5865F2, "cours": 0x57F287, "devoir": 0xFEE75C,

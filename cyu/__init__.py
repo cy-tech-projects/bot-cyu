@@ -7,6 +7,7 @@ bot.py (le bot Discord) et assistant.py (le daemon et la ligne de commande).
     promo.py      devoirs, rappels, predictions, sondages, anniversaires,
                   evenements, quiz Pokemon
     ecole.py      la maquette (M3C) et le calendrier d'alternance
+    trains.py     les prochains trains : gares, lignes, temps reel IDFM
     affichage.py  le texte, les cartes Discord, l'envoi dans les salons
     image.py      le rendu des images
 """
