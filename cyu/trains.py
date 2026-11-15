@@ -118,8 +118,10 @@ class Passage:
 
     @property
     def retard(self):
-        """Le retard en minutes entieres, 0 a l'heure ou en avance."""
-        return max(0, round((self.heure - self.prevue).total_seconds() / 60))
+        """Le retard en minutes entieres, 0 a l'heure ou en avance. Arrondi par
+        defaut : PRIM annonce souvent 30 a 50 s d'ecart sur un train « onTime »,
+        qu'un « +1 » rouge ferait passer pour un retard."""
+        return max(0, int((self.heure - self.prevue).total_seconds() // 60))
 
     def minutes(self, maintenant=None):
         maintenant = maintenant or datetime.now()
