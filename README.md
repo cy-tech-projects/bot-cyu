@@ -18,6 +18,7 @@ fichier : **`config.yaml`**. Aucun fichier Python n'a de valeur à modifier.
 | **20 h** | `#annonces` | **la photo de demain**, l'heure de lever conseillée, les échéances |
 | **dimanche 18 h** | `#annonces` | **la photo de la semaine** qui vient, puis **ce qu'elle pèse en chiffres** |
 | **18 h** | `#devoirs` | « tu as eu Corporate finance et VBA, des devoirs à noter ? » |
+| 2 min avant la fin d'un cours | `#annonces` | 🚪 **on change de salle**, si le cours suivant n'est pas dans la même, et **il te tague** |
 | dès qu'un cours bouge | `#alertes` | **la photo du changement**, et **il te tague** — les jours de `jours_alertes` |
 | en permanence | `#edt` · `#statut` | l'image de la semaine et le panneau d'état, réécrits sur place, **sans notification** |
 | **8 h, le jour J** | `#annonces` | 🎂 **joyeux anniversaire** à qui a donné le sien avec `/anniversaire` |

@@ -501,6 +501,19 @@ def daemon():
                             couleur="cours", ping=bool(liees), canal="annonces")
                     marquer(etat, cle)
 
+        # 4 bis. La salle change d'un cours au suivant, meme matiere ou non :
+        #        prevenu 2 min avant la fin du cours qu'on quitte, ou plus tard
+        #        si le bot etait occupe, tant que le suivant n'a pas commence.
+        for avant, apres in zip(jc, jc[1:]):
+            cle = f"salle:{apres.debut.isoformat()}"
+            if apres.ou in (avant.ou, "salle inconnue") or deja_envoye(etat, cle):
+                continue
+            if (avant.fin or avant.debut) - timedelta(minutes=2) <= maintenant < apres.debut:
+                envoyer(f"🚪 On change de salle : {apres.ou}",
+                        [f"{avant.ou}  ➜  **{apres.ou}**", "", apres.ligne()],
+                        couleur="cours", ping=True, canal="annonces")
+                marquer(etat, cle)
+
         # 5. Le premier cours de la journee, et lui seul : le seul rappel qui
         #    sert vraiment, celui qui te fait sortir de chez toi.
         if config.PREMIER_COURS_MINUTES and jc:
