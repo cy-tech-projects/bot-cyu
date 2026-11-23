@@ -360,6 +360,7 @@ rien en mémoire. Un message d'il y a un mois marche encore.
 | `/prediction` | **vos prédictions** 🔮 : la liste, chacun vote 👍👎, l'auteur tranche, un classement dit qui avait raison (prophètes et parieurs). Les paris de l'assistant 🤖 — le cours qui va bouger, le jour où tu vas craquer, le jour du parapluie, des vrais chiffres et des fausses cotes — sont derrière un bouton |
 | `/parier` | poser une prédiction : le texte, d'ici quand (date ou en toutes lettres), la mise. **Sa carte part dans `#predictions`**, avec ses boutons de vote |
 | `/quiz [generation]` | **Qui est ce Pokémon ?** 🏆 une silhouette, quatre noms, une tentative chacun. Le premier qui trouve prend la prime, `⌨️ Je tape le nom` rapporte plus. `quoi: le classement` pour le **podium de la promo** en photo |
+| `/poker` | **Poker Night** 🃏 : l'invitation du jeu dans ton salon vocal (sinon le premier du serveur), un clic sur **Jouer** |
 | `/sondage` | **un vrai sondage Discord** : `question:`, `reponses:` (`🍕 Pizza ; 🍔 Burger`, vide = Oui / Non), `duree:`, `plusieurs:`. Le résultat est annoncé à la fin |
 | `/rappel` | `quand:demain 9h texte:rendre le TP` — le bot te mentionne à l'heure dite, là où tu l'as posé. `qui: tout le salon` pour un @here |
 | `/rappels` | tes rappels en attente, un menu pour en annuler |

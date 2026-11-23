@@ -24,6 +24,7 @@ C'est le fichier a lancer au quotidien. Un seul processus fait les deux choses :
     /sondage            un vrai sondage Discord, resultat annonce a la fin
     /rappel, /rappels   « demain 9h : rendre le TP », le bot te mentionne
     /anniversaire(s)    le tien, et les prochains de la promo
+    /poker              une partie de Poker Night dans le salon vocal
     /meteo [jours]      le temps, et s'il faut un parapluie pour ton trajet
     /trains [gare]      les prochains RER, Transilien, metros et trams en temps
                         reel ; sans gare, tes trajets de config.yaml
@@ -2949,6 +2950,8 @@ def texte_aide():
         "`/rappels` — tes rappels en attente, et de quoi en annuler un",
         "`/anniversaire quand:12/10` — le tien (avec l'année, il dira ton âge) · "
         "`/anniversaires` — les prochains de la promo",
+        "`/poker` — **Poker Night** 🃏 dans ton salon vocal (sinon le premier du "
+        "serveur) : un clic sur **Jouer**",
         "",
         "### Les devoirs",
         "`/devoirs` — la liste, **un bouton ✅ par devoir**, un menu pour supprimer",
@@ -3788,6 +3791,25 @@ async def cmd_anniversaire(inter: discord.Interaction, quand: str = "", retirer:
 @bot.tree.command(name="anniversaires", description="Les prochains anniversaires de la promo")
 async def cmd_anniversaires(inter: discord.Interaction):
     await _commande(inter, vue_anniversaires(inter.user.id))
+
+
+POKER_NIGHT = 755827207812677713
+
+
+@bot.tree.command(name="poker", description="Une partie de Poker Night dans le salon vocal")
+@app_commands.guild_only()
+async def cmd_poker(inter: discord.Interaction):
+    """Un bot ne peut pas lancer l'activité d'une autre application : il crée
+    l'invitation Poker Night d'un vocal (celui où tu es, sinon le premier du
+    serveur), et Discord l'affiche en carte « Jouer »."""
+    vocal = inter.user.voice.channel if inter.user.voice else next(iter(inter.guild.voice_channels), None)
+    if vocal is None:
+        await inter.response.send_message(
+            view=affichage.erreur("Il faut un salon vocal sur ce serveur pour jouer."), ephemeral=True)
+        return
+    invitation = await vocal.create_invite(target_type=discord.InviteTarget.embedded_application,
+                                           target_application_id=POKER_NIGHT)
+    await inter.response.send_message(invitation.url)
 
 
 @bot.tree.command(name="clear", description="Vider ce salon — les messages épinglés sont gardés")
